@@ -10,7 +10,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read     # Used by checkout
+      pages: write       # Required to deploy to GitHub Pages
+      id-token: write    # Required for authentication
     steps:
       - uses: actions/checkout@v4
       
@@ -20,8 +22,11 @@ jobs:
           npm install
           npm run build
           
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./frontend/dist # Path to your build folder
+          path: './frontend/dist' # This points to your built files
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
