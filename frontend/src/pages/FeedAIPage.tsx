@@ -118,9 +118,9 @@ export function FeedAIPage() {
                 <Button onClick={handleSubmitFeed} isLoading={isLoading}>
                   Feed RAG
                 </Button>
-                <Button variant="secondary" onClick={handleClearRag} isLoading={isLoading}>
+                {/* <Button variant="secondary" onClick={handleClearRag} isLoading={isLoading}>
                   Clear RAG
-                </Button>
+                </Button> */}
               </div>
 
               {uploadStatusMessage && (
