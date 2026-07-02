@@ -21,6 +21,10 @@ jobs:
           cd frontend
           npm install
           npm run build
+        env:
+          # This maps the GitHub Secret to an environment variable 
+          # that Vite will pick up during the build process
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

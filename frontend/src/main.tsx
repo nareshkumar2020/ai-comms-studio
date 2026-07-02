@@ -7,7 +7,7 @@ import { DraftProvider } from './context/DraftContext';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="ai-comms-studio">
       <DraftProvider>
         <App />
       </DraftProvider>
