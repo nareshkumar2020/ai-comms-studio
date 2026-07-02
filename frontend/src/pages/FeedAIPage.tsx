@@ -118,6 +118,7 @@ export function FeedAIPage() {
                 <Button onClick={handleSubmitFeed} isLoading={isLoading}>
                   Feed RAG
                 </Button>
+                {/* TODO: Add clear RAG functionality */}
                 {/* <Button variant="secondary" onClick={handleClearRag} isLoading={isLoading}>
                   Clear RAG
                 </Button> */}
