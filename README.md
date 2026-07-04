@@ -10,8 +10,8 @@ The application executes the **Capture → Refine → Finalize** workflow via a 
 
 **Core Features:**
 1. **Guided Draft Generation** — Capture a transcript, select a target channel, tone etc and generate 3 AI draft variants
-2. **One-Click Refinement** — Quick-action buttons for targeted edits (Tone, Shorten, Longer, Dramatic, Engaging)
-3. **Finalize & Export** — Review with automated quality checks, copy to clipboard, download as Markdown, or push to CMS
+2. **One-Click Refinement** — Quick-action buttons for targeted edits (Tone, Shorten, Longer, Dramatic, Engaging) and review quality metrics
+3. **Finalize & Export** — Copy to clipboard, download as Markdown, or push to CMS
 
 ---
 
@@ -62,45 +62,18 @@ npm run dev
 
 ---
 
-## 🧠 Mock LLM Service
+### **Mock LLM Service**
 
-The project ships with a **high-fidelity mock service** (`MockLLMService`) that realistically simulates AI-generated drafts without requiring an OpenAI API key. Set `USE_MOCK_LLM=true` in `backend/.env` (the default).
+The `mock_service.py` module provides a non-live alternative to the production `OpenAIService`. It is managed via `get_llm_provider` in **main.py**, which defaults to the mock service unless the `llm_mode` is explicitly set to `'live'`.
 
-### Channel-Specific Templates
 
-The mock generates structurally distinct drafts for each target channel:
+#### **Key Features**
 
-| Channel | Draft Format |
-|---|---|
-| **LinkedIn** | Short, conversational post with emojis, bullet points, and hashtag-style language |
-| **Blog Post / Website** | Long-form Markdown with `#` titles, `##` section headings, and structured paragraphs |
-| **Internal Email** | `Subject:` line, greeting, body paragraphs, and professional signature block |
+* Integration: Seamlessly swaps between mock and live providers based on request parameters.
 
-### Tone Variation
+* Validation: Enforces schema constraints (e.g., minimum lengths) defined in **models.py**.
 
-Each channel template has three tone variants that include keywords matching the frontend quality checks:
-
-| Tone | Style | Keywords included |
-|---|---|---|
-| **Professional** | Formal, polished | `regards`, `sincerely`, `dear`, `professional`, `respectfully` |
-| **Enthusiastic** | Energetic, exclamation-heavy | `excited`, `thrilled`, `amazing`, `great`, `enthusiastic`, 🚀🎉✨ |
-| **Executive Summary** | Concise, data-driven | `summary`, `overview`, `key takeaways`, `high-level` |
-
-### Dynamic Refinement
-
-The `refine_text` endpoint applies contextually-aware transformations:
-
-| Adjustment | Behavior |
-|---|---|
-| **Shorten** | Condenses to headings + first bullet point; truncates paragraphs |
-| **Longer** | Appends channel-appropriate expansion (industry outlook for blogs, Q&A for emails, conversation prompt for LinkedIn) |
-| **Dramatic** | Replaces headings with bold impactful language (`Key Highlights` → `**Standout Achievements**`) |
-| **Engaging** | Prepends conversational hooks and appends call-to-action questions |
-| **Tone** | Switches between Enthusiastic ↔ Professional (strips/adds emojis, swaps vocabulary) |
-
-### Key Points Extraction
-
-The mock service extracts bullet points from the user's transcript and returns them as `key_points` in the API response. The frontend stores these in `draftState.keyPoints` so that the **Keyword Density** quality check passes automatically.
+* Response Structure: Returns simulated data matching the `AIResponse` structure, including randomized quality metrics.
 
 ---
 
@@ -117,15 +90,15 @@ class ILLMProvider(ABC):
     async def generate_draft(self, inputs: GenerateRequest) -> AIResponse: ...
 
     @abstractmethod
-    async def refine_text(self, current_text: str, instruction: str, adjustment_type: str | None = None) -> AIResponse: ...
+    async def refine_text(self, inputs: 'RefineRequest') -> AIResponse: ...
 ```
 
 FastAPI routes inject the correct provider based on environment:
 
 ```python
 # backend/app/main.py
-def get_llm_provider():
-    if os.getenv("USE_MOCK_LLM", "true").lower() == "true":
+def get_llm_provider():(llm_mode: str | None = None):
+    if llm_mode and llm_mode.lower() == 'live':
         return MockLLMService()
     return OpenAIService()
 ```
@@ -136,16 +109,14 @@ def get_llm_provider():
 |---|---|---|
 | `GET` | `/health` | Health check |
 | `POST` | `/api/generate` | Generate 3 draft variants from a transcript, channel, tone, and metadata |
-| `POST` | `/api/refine` | Refine a draft with an instruction and adjustment type |
+| `POST` | `/api/refine` | Refine a draft with an instruction and adjustment type with quality metrics |
 | `POST` | `/api/upload` | Upload a `.txt`, `.pdf`, or `.docx` file and extract text |
 
 ### Response Model
 
 ```python
 class AIResponse(BaseModel):
-    text: str | None = None          # Used by /api/refine
-    drafts: list[str] | None = None  # Used by /api/generate (3 variants)
-    key_points: list[str] | None = None  # Extracted key points from the content
+    results: list[DraftResult]
     error: str | None = None
 ```
 
@@ -162,7 +133,7 @@ class AIResponse(BaseModel):
 
 ### Backend (API & Orchestration)
 * **Framework:** FastAPI (Python) — lightweight, async-native
-* **LLM Integration:** OpenAI Python SDK + high-fidelity `MockLLMService`
+* **LLM Integration:** OpenAI Python SDK + `MockLLMService`
 * **File Extraction:** PyPDF2 (PDF), python-docx (DOCX), native (TXT)
 * **Security:** python-dotenv for credential management
 
@@ -207,9 +178,6 @@ comms-ai-prototype/
 │   │   ├── App.tsx
 │   │   ├── main.tsx
 │   │   └── index.css
-│   ├── DESIGN_SYSTEM.md
-│   ├── IMPLEMENTATION_GUIDE.md
-│   ├── COMPONENT_INVENTORY.md
 │   ├── tailwind.config.js
 │   └── package.json
 ├── backend/                          # FastAPI app
@@ -220,11 +188,12 @@ comms-ai-prototype/
 │   │   └── services/
 │   │       ├── llm_provider.py      # Abstract provider interface
 │   │       ├── openai_service.py    # OpenAI implementation (with key_points extraction)
-│   │       └── mock_service.py      # High-fidelity mock (channel/tone templates)
+|   |       ├── prompt_builder.py    # Prompt template
+│   │       └── mock_service.py      # Mock (channel/tone templates)
 │   ├── requirements.txt
 │   └── .env                         # USE_MOCK_LLM=true (default)
 ├── docs/
-│   ├── transcript-converter-prd.md
+│   ├── base-prd.md
 │   ├── feature_mapping_prototype_strategy.md
 │   ├── Product_Architecture_Document.md
 │   └── user_research_product_vision.md
@@ -284,4 +253,3 @@ The **Finalize** step runs four automated quality checks before allowing CMS pus
 - Safari (latest)
 - Mobile browsers (iOS Safari 14+, Chrome Android 80+)
 
----

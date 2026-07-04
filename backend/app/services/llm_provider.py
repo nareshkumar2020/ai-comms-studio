@@ -9,7 +9,5 @@ class ILLMProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def refine_text(
-        self, inputs: 'RefineRequest'
-    ) -> AIResponse:
+    async def refine_text(self, inputs: 'RefineRequest') -> AIResponse:
         raise NotImplementedError
