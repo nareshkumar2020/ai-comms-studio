@@ -179,7 +179,7 @@ export function RefinementEditor({ onRegenerateDraft }: RefinementEditorProps) {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
                   <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Context Match Score</p>
                   <p className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-                    {currentQuality?.ragScore != null ? `${(currentQuality.ragScore * 100).toFixed(0)}%` : 'N/A'}
+                    {currentQuality?.ragScore != null ? `${(currentQuality.ragScore).toFixed(0)}%` : 'N/A'}
                   </p>
                 </div>
               </div>
