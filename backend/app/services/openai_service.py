@@ -1,9 +1,10 @@
+from app.models import RefineRequest
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from app.models import AIResponse, GenerateRequest
+from app.models import AIResponse, GenerateRequest, DraftResult
 from app.services.llm_provider import ILLMProvider
 from app.services.prompt_builder import build_all_prompts
 from app.services.evaluation_service import evaluate_drafts
@@ -18,27 +19,7 @@ for env_path in [
     load_dotenv(dotenv_path=env_path, override=False)
 
 
-def extract_key_points(text: str) -> list[str]:
-    # Extract lines starting with bullet points or numbered lists
-    points = []
-    for line in text.split('\n'):
-        clean = line.strip().lstrip('-*•123456789. ')
-        if clean and len(clean) > 10 and (
-            line.strip().startswith('-')
-            or line.strip().startswith('*')
-            or line.strip().startswith('•')
-            or (line.strip() and line.strip()[0].isdigit() and '.' in line.strip()[:3])
-        ):
-            points.append(clean)
-    if not points:
-        # Fallback: extract first few non-empty lines that don't look like headers
-        for line in text.split('\n'):
-            clean = line.strip()
-            if clean and len(clean) > 15 and not clean.startswith('#') and not clean.startswith('Subject:'):
-                points.append(clean)
-                if len(points) >= 3:
-                    break
-    return points[:3]
+
 
 
 class OpenAIService(ILLMProvider):
@@ -74,14 +55,17 @@ class OpenAIService(ILLMProvider):
             content = response.choices[0].message.content or 'Draft generation failed.'
             drafts.append(content.strip())
 
-        quality = evaluate_drafts(drafts, inputs)
-        key_points = [kp for draft in drafts for kp in extract_key_points(draft)]
+        qualities = await evaluate_drafts(drafts, inputs)
+        
+        results = []
+        for draft, quality in zip(drafts, qualities):
+            results.append(DraftResult(text=draft, quality=quality))
 
-        return AIResponse(drafts=drafts, key_points=key_points, quality=quality)
+        return AIResponse(results=results)
 
 
     async def refine_text(
-        self, inputs: 'RefineRequest'
+        self, inputs: RefineRequest
     ) -> AIResponse:
         if not self._client:
             raise RuntimeError('OpenAI client is unavailable. Set OPENAI_API_KEY or use the mock provider.')
@@ -100,5 +84,8 @@ class OpenAIService(ILLMProvider):
         )
         content = response.choices[0].message.content or 'Refinement failed.'
         
-        quality = evaluate_drafts([content], inputs)
-        return AIResponse(text=content, quality=quality)
+        qualities = await evaluate_drafts([content], inputs)
+        
+        results = [DraftResult(text=content, quality=qualities[0] if qualities else None)]
+
+        return AIResponse(results=results)

@@ -8,7 +8,7 @@ interface LLMModeToggleProps {
 export function LLMModeToggle({ mode, setMode }: LLMModeToggleProps) {
   return (
     <div className="flex items-center gap-4">
-      <a 
+      {/* <a 
         href="/mock_data.md" 
         target="_blank" 
         rel="noreferrer"
@@ -16,7 +16,7 @@ export function LLMModeToggle({ mode, setMode }: LLMModeToggleProps) {
         title="View mock data scenarios for testing"
       >
         Mock Data Guide
-      </a>
+      </a> */}
       <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-3 py-2 text-sm text-slate-700 shadow-sm shadow-slate-200/60 dark:border-slate-700 dark:bg-slate-950/90 dark:text-slate-200 dark:shadow-slate-950/40">
         <span className="font-semibold uppercase tracking-wide">AI mode</span>
         <button

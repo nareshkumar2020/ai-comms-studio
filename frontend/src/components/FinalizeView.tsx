@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useDraftContext } from "../context/DraftContext";
 import { Button, Card, CardHeader, CardContent, QualityChecks } from "./ui";
-import { validateRagText, type RAGValidationResponse } from "../lib/api";
+// import { validateRagText, type RAGValidationResponse } from "../lib/api";
 import { REFINE_STEP_COPY } from "../constants/uiCopy";
 import { type DraftQualityCheck } from "../types/qualityChecks";
 import { FINALISE_STEP_COPY } from "../constants/uiCopy";
@@ -37,66 +37,66 @@ export function FinalizeView({ onRestartWorkflow }: FinalizeViewProps) {
   const [persistedDraftRecords, setPersistedDraftRecords] = useState<
     PersistedDraftRecord[]
   >([]);
-  const [ragValidation, setRagValidation] = useState<RAGValidationResponse | null>(null);
+  // const [ragValidation, setRagValidation] = useState<RAGValidationResponse | null>(null);
   const [isRagValidating, setIsRagValidating] = useState(false);
 
   useEffect(() => {
     if (!selectedDraftContent) {
-      setRagValidation(null);
+      // setRagValidation(null);
     }
   }, [selectedDraftContent]);
 
-  const handleFactCheck = () => {
-    if (!selectedDraftContent) return;
-    setIsRagValidating(true);
-    validateRagText(selectedDraftContent, 5)
-      .then(setRagValidation)
-      .catch(() => setRagValidation(null))
-      .finally(() => setIsRagValidating(false));
-  };
+  // const handleFactCheck = () => {
+  //   if (!selectedDraftContent) return;
+  //   setIsRagValidating(true);
+  //   validateRagText(selectedDraftContent, 5)
+  //     .then(setRagValidation)
+  //     .catch(() => setRagValidation(null))
+  //     .finally(() => setIsRagValidating(false));
+  // };
 
-  const ragMatchThreshold = 0.45;
-  const ragCheck: DraftQualityCheck = ragValidation
-    ? ragValidation.loaded
-      ? ragValidation.best_score >= ragMatchThreshold
-        ? {
-            id: 'rag',
-            status: 'pass',
-            label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
-            description: REFINE_STEP_COPY.qualityChecks.ragMatchPass,
-          }
-        : {
-            id: 'rag',
-            status: 'fail',
-            label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
-            description: REFINE_STEP_COPY.qualityChecks.ragMatchFail,
-            helperText: REFINE_STEP_COPY.helperText.ragWarning,
-          }
-      : {
-          id: 'rag',
-          status: 'warning',
-          label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
-          description: REFINE_STEP_COPY.qualityChecks.ragMatchWarning,
-          helperText: REFINE_STEP_COPY.helperText.ragWarning,
-        }
-    : {
-        id: 'rag',
-        status: 'warning',
-        label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
-        description: REFINE_STEP_COPY.qualityChecks.ragMatchWarning,
-        helperText: REFINE_STEP_COPY.helperText.ragWarning,
-      };
+  // const ragMatchThreshold = 0.45;
+  // const ragCheck: DraftQualityCheck = ragValidation
+  //   ? ragValidation.loaded
+  //     ? ragValidation.best_score >= ragMatchThreshold
+  //       ? {
+  //           id: 'rag',
+  //           status: 'pass',
+  //           label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
+  //           description: REFINE_STEP_COPY.qualityChecks.ragMatchPass,
+  //         }
+  //       : {
+  //           id: 'rag',
+  //           status: 'fail',
+  //           label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
+  //           description: REFINE_STEP_COPY.qualityChecks.ragMatchFail,
+  //           helperText: REFINE_STEP_COPY.helperText.ragWarning,
+  //         }
+  //     : {
+  //         id: 'rag',
+  //         status: 'warning',
+  //         label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
+  //         description: REFINE_STEP_COPY.qualityChecks.ragMatchWarning,
+  //         helperText: REFINE_STEP_COPY.helperText.ragWarning,
+  //       }
+  //   : {
+  //       id: 'rag',
+  //       status: 'warning',
+  //       label: REFINE_STEP_COPY.qualityChecks.ragMatchLabel,
+  //       description: REFINE_STEP_COPY.qualityChecks.ragMatchWarning,
+  //       helperText: REFINE_STEP_COPY.helperText.ragWarning,
+  //     };
 
-  const currentQuality = draftState.draftQualities[draftState.selectedDraftIndex];
-  const qualityChecks: DraftQualityCheck[] = useMemo(() => {
-    const checks = currentQuality?.criteria?.map((c: any) => ({
-      id: c.id,
-      label: c.label,
-      status: c.status,
-      description: c.description,
-    })) || [];
-    return [...checks, ragCheck];
-  }, [currentQuality, ragCheck]);
+  // const currentQuality = draftState.draftQualities[draftState.selectedDraftIndex];
+  // const qualityChecks: DraftQualityCheck[] = useMemo(() => {
+  //   const checks = currentQuality?.criteria?.map((c: any) => ({
+  //     id: c.id,
+  //     label: c.label,
+  //     status: c.status,
+  //     description: c.description,
+  //   })) || [];
+  //   return [...checks, ragCheck];
+  // }, [currentQuality, ragCheck]);
 
   useEffect(() => {
     const persistedStorageKeys = Object.keys(localStorage).filter(

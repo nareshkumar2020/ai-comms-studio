@@ -9,30 +9,11 @@ from fastapi.responses import FileResponse
 
 from app.models import (
     AIResponse,
-    ChunkRequest,
-    ChunkResponse,
-    EmbedRequest,
-    EmbedResponse,
     GenerateRequest,
-    RAGFeedRequest,
-    RAGStatusResponse,
-    RAGValidationRequest,
-    RAGValidationResponse,
     RefineRequest,
-    SearchRequest,
-    SearchResponse,
 )
 from app.services.mock_service import MockLLMService
 from app.services.openai_service import OpenAIService
-from app.services.rag_service import (
-    chunk_text,
-    embed_chunks,
-    get_rag_status,
-    feed_rag_text,
-    clear_rag_state,
-    validate_rag_text,
-    search_similar_chunks,
-)
 
 for env_path in [
     Path(__file__).resolve().parents[1] / '.env',
@@ -73,68 +54,6 @@ async def generate(inputs: GenerateRequest) -> AIResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post('/api/chunk', response_model=ChunkResponse)
-async def chunk_text_endpoint(payload: ChunkRequest) -> ChunkResponse:
-    try:
-        chunks = chunk_text(payload.text, payload.chunk_size, payload.overlap)
-        return ChunkResponse(chunks=chunks)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post('/api/embed', response_model=EmbedResponse)
-async def embed_texts(payload: EmbedRequest) -> EmbedResponse:
-    try:
-        return embed_chunks(payload)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post('/api/search', response_model=SearchResponse)
-async def search_chunks(payload: SearchRequest) -> SearchResponse:
-    try:
-        return search_similar_chunks(payload)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post('/api/rag/feed', response_model=RAGStatusResponse)
-async def rag_feed(payload: RAGFeedRequest) -> RAGStatusResponse:
-    try:
-        return feed_rag_text(payload.text, payload.chunk_size, payload.overlap)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.get('/api/rag/status', response_model=RAGStatusResponse)
-async def rag_status() -> RAGStatusResponse:
-    try:
-        return get_rag_status()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post('/api/rag/clear', response_model=RAGStatusResponse)
-async def rag_clear() -> RAGStatusResponse:
-    try:
-        return clear_rag_state()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.post('/api/rag/validate', response_model=RAGValidationResponse)
-async def rag_validate(payload: RAGValidationRequest) -> RAGValidationResponse:
-    try:
-        return validate_rag_text(payload.text, payload.top_k)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
 
 @app.post('/api/upload')
 async def upload_file(file: UploadFile = File(...)) -> dict:
@@ -203,7 +122,7 @@ async def refine(payload: RefineRequest) -> AIResponse:
 frontend_dist_path = os.getenv("FRONTEND_DIST_PATH", str(Path(__file__).resolve().parents[2] / 'frontend' / 'dist'))
 
 if os.path.exists(frontend_dist_path):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets")), name="assets")
+    app.mount("/ai-comms-studio/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets")), name="assets")
     
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):

@@ -17,82 +17,6 @@ class GenerateRequest(BaseModel):
     llm_mode: str | None = None
 
 
-class Chunk(BaseModel):
-    id: str
-    text: str
-    start: int
-    end: int
-
-
-class ChunkRequest(BaseModel):
-    text: str = Field(..., min_length=1)
-    chunk_size: int = Field(500, gt=0)
-    overlap: int = Field(100, ge=0)
-
-
-class ChunkResponse(BaseModel):
-    chunks: list[Chunk]
-
-
-class EmbeddingItem(BaseModel):
-    id: str
-    text: str
-
-
-class EmbedRequest(BaseModel):
-    chunks: list[EmbeddingItem]
-
-
-class EmbeddingOutput(BaseModel):
-    id: str
-    embedding: list[float]
-
-
-class EmbedResponse(BaseModel):
-    embeddings: list[EmbeddingOutput]
-
-
-class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=1)
-    embeddings: list[EmbeddingOutput]
-    chunks: list[Chunk]
-    top_k: int = Field(5, ge=1)
-
-
-class SearchMatch(BaseModel):
-    id: str
-    text: str
-    score: float
-
-
-class SearchResponse(BaseModel):
-    matches: list[SearchMatch]
-
-
-class RAGFeedRequest(BaseModel):
-    text: str = Field(..., min_length=1)
-    chunk_size: int = Field(500, gt=0)
-    overlap: int = Field(100, ge=0)
-
-
-class RAGStatusResponse(BaseModel):
-    loaded: bool
-    chunk_count: int
-    embedding_count: int
-    text_summary: str | None = None
-
-
-class RAGValidationRequest(BaseModel):
-    text: str = Field(..., min_length=1)
-    top_k: int = Field(5, ge=1)
-
-
-class RAGValidationResponse(BaseModel):
-    loaded: bool
-    best_score: float
-    matches: list[SearchMatch]
-
-
 class RefineRequest(BaseModel):
     current_text: str = Field(..., min_length=10)
     instruction: str = Field(..., min_length=3)
@@ -112,11 +36,24 @@ class RefineRequest(BaseModel):
     transcript: str | None = None
 
 
-class AIResponse(BaseModel):
-    text: str | None = None
-    drafts: list[str] | None = None
-    key_points: list[str] | None = None
-    error: str | None = None
-    quality: dict | None = None
-    rag_matches: list[SearchMatch] | None = None
+class QualityCriteria(BaseModel):
+    id: str
+    label: str
+    status: str
+    description: str
 
+
+class QualityDetails(BaseModel):
+    qualityScore: float
+    ragScore: float | None = None
+    criteria: list[QualityCriteria]
+
+
+class DraftResult(BaseModel):
+    text: str
+    quality: QualityDetails | None = None
+
+
+class AIResponse(BaseModel):
+    results: list[DraftResult]
+    error: str | None = None

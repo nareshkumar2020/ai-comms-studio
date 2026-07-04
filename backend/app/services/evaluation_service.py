@@ -1,117 +1,241 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+from pathlib import Path
 from typing import Any
-from app.models import GenerateRequest, RefineRequest
 
-def score_draft(text: str, inputs: Any) -> dict:
-    details = []
-    
-    # Extract fields safely since inputs could be GenerateRequest or RefineRequest
-    target_channel = getattr(inputs, 'content_type', '') or getattr(inputs, 'platform', '')
-    tone = getattr(inputs, 'tone', '')
-    target_audience = getattr(inputs, 'target_audience', '')
-    goal = getattr(inputs, 'goal', '')
-    desired_length = getattr(inputs, 'desired_length', '')
-    keywords = getattr(inputs, 'keywords', '')
-    brand_voice = getattr(inputs, 'brand_voice', '')
-    additional_instructions = getattr(inputs, 'additional_instructions', '')
+from dotenv import load_dotenv
 
-    text_lower = text.lower()
+from app.models import GenerateRequest, QualityCriteria, QualityDetails, RefineRequest
 
-    # 1. Target Channel
-    channel_pass = True if not target_channel else any(w in text_lower for w in target_channel.lower().split() if len(w) > 3)
-    details.append({
-        'id': 'target_channel',
-        'label': 'Target Channel',
-        'status': 'pass' if channel_pass else 'warning',
-        'description': 'Aligns with target channel requirements.' if channel_pass else 'May not fit the requested channel.'
-    })
-
-    # 2. Tone
-    tone_pass = True if not tone else any(w in text_lower for w in tone.lower().split() if len(w) > 3)
-    details.append({
-        'id': 'tone',
-        'label': 'Tone',
-        'status': 'pass' if tone_pass else 'warning',
-        'description': 'Tone matches the requested style.' if tone_pass else 'Tone may drift from the requested style.'
-    })
-
-    # 3. Target Audience
-    audience_pass = True if not target_audience else any(w in text_lower for w in target_audience.lower().split() if len(w) > 3)
-    details.append({
-        'id': 'target_audience',
-        'label': 'Target Audience',
-        'status': 'pass' if audience_pass else 'warning',
-        'description': 'Draft mentions the intended audience.' if audience_pass else 'Consider making the audience more explicit.'
-    })
-
-    # 4. Goal
-    goal_pass = True if not goal else True # Difficult to heuristically measure goal
-    details.append({
-        'id': 'goal',
-        'label': 'Goal',
-        'status': 'pass',
-        'description': 'Draft aims to fulfill the stated goal.'
-    })
-
-    # 5. Desired Length
-    length_pass = True
-    char_len = len(text)
-    dl_lower = desired_length.lower()
-    if 'short' in dl_lower and char_len > 800:
-        length_pass = False
-    elif 'long' in dl_lower and char_len < 800:
-        length_pass = False
-    
-    details.append({
-        'id': 'desired_length',
-        'label': 'Desired Length',
-        'status': 'pass' if length_pass else 'warning',
-        'description': 'Draft falls within the desired length.' if length_pass else 'Draft length deviates from request.'
-    })
-
-    # 6. Keywords
-    keys = [k.strip().lower() for k in keywords.split(',')] if keywords else []
-    keys_pass = True if not keys else all(k in text_lower for k in keys if k)
-    details.append({
-        'id': 'keywords',
-        'label': 'Keywords',
-        'status': 'pass' if keys_pass else 'warning',
-        'description': 'Keywords are included in the draft.' if keys_pass else 'Consider adding more of the requested keywords.'
-    })
-
-    # 7. Brand Voice
-    brand_voice_pass = True if not brand_voice else any(w in text_lower for w in brand_voice.lower().split() if len(w) > 3)
-    details.append({
-        'id': 'brand_voice',
-        'label': 'Brand Voice',
-        'status': 'pass' if brand_voice_pass else 'warning',
-        'description': 'Reflects the requested brand voice.' if brand_voice_pass else 'Brand voice may not be prominent.'
-    })
-
-    # 8. Additional Instructions
-    addtl_pass = True if not additional_instructions else True # Hard to measure heuristically
-    details.append({
-        'id': 'additional_instructions',
-        'label': 'Additional Instructions',
-        'status': 'pass',
-        'description': 'Follows additional instructions.'
-    })
-
-    # Compute overall score
-    score = sum(100 if d['status'] == 'pass' else 60 for d in details) / max(len(details), 1)
-
-    return {
-        'score': min(score, 100),
-        'criteria': details,
-    }
+for env_path in [
+    Path(__file__).resolve().parents[2] / '.env',
+    Path(__file__).resolve().parents[2] / '.env.local',
+    Path(__file__).resolve().parents[3] / '.env',
+    Path(__file__).resolve().parents[3] / '.env.local',
+]:
+    load_dotenv(dotenv_path=env_path, override=False)
 
 
-def evaluate_drafts(drafts: list[str], inputs: Any) -> dict:
-    return {
-        'drafts': [
-            {
-                'text': draft,
-                'quality': score_draft(draft, inputs),
-            }
-            for draft in drafts
-        ]
-    }
+# A separate (optionally cheaper/faster) model can be used for judging vs. generation.
+_EVAL_MODEL = os.getenv('OPENAI_EVAL_MODEL', os.getenv('OPENAI_MODEL', 'gpt-4.1-mini'))
+
+_STATUS_SCORES = {'pass': 100.0, 'partial': 50.0, 'fail': 0.0}
+
+
+def _build_rubric(inputs: GenerateRequest | RefineRequest) -> list[dict[str, str]]:
+    """Build the list of rubric criteria that apply, based on which attributes the user
+    actually supplied (GenerateRequest has them all populated; RefineRequest fields are
+    optional, so only score what's available)."""
+    rubric: list[dict[str, str]] = []
+
+    if getattr(inputs, 'target_audience', None):
+        rubric.append({
+            'id': 'audience_fit',
+            'label': 'Audience Fit',
+            'guidance': f'Does the draft speak appropriately to the target audience: "{inputs.target_audience}"?',
+        })
+    if getattr(inputs, 'goal', None):
+        rubric.append({
+            'id': 'goal_alignment',
+            'label': 'Goal Alignment',
+            'guidance': f'Does the draft accomplish the stated goal: "{inputs.goal}"?',
+        })
+    if getattr(inputs, 'tone', None):
+        rubric.append({
+            'id': 'tone_match',
+            'label': 'Tone Match',
+            'guidance': f'Does the draft consistently match the requested tone: "{inputs.tone}"?',
+        })
+    if getattr(inputs, 'content_type', None) or getattr(inputs, 'platform', None):
+        content_type = getattr(inputs, 'content_type', None) or 'the requested format'
+        platform = getattr(inputs, 'platform', None) or 'the requested platform'
+        rubric.append({
+            'id': 'format_fit',
+            'label': 'Format & Platform Fit',
+            'guidance': f'Is the draft correctly structured as a {content_type} suited for {platform}?',
+        })
+    if getattr(inputs, 'desired_length', None):
+        rubric.append({
+            'id': 'length_adherence',
+            'label': 'Length Adherence',
+            'guidance': f'Does the draft\'s length reasonably match the desired length: "{inputs.desired_length}"?',
+        })
+    if getattr(inputs, 'keywords', None):
+        rubric.append({
+            'id': 'keyword_usage',
+            'label': 'Keyword Usage',
+            'guidance': f'Does the draft naturally incorporate these keywords/phrases: "{inputs.keywords}"?',
+        })
+    if getattr(inputs, 'brand_voice', None):
+        rubric.append({
+            'id': 'brand_voice',
+            'label': 'Brand Voice Consistency',
+            'guidance': f'Does the draft stay consistent with this brand voice description: "{inputs.brand_voice}"?',
+        })
+    if getattr(inputs, 'additional_instructions', None):
+        rubric.append({
+            'id': 'special_instructions',
+            'label': 'Special Instructions',
+            'guidance': f'Does the draft follow these additional instructions: "{inputs.additional_instructions}"?',
+        })
+
+    # Always assess factual grounding against source material when a transcript exists.
+    if getattr(inputs, 'transcript', None):
+        rubric.append({
+            'id': 'content_accuracy',
+            'label': 'Content Accuracy',
+            'guidance': 'Does the draft accurately reflect facts, claims, and details from the source transcript without fabrication?',
+        })
+
+    return rubric
+
+
+def _build_evaluation_prompt(
+    draft: str, inputs: GenerateRequest | RefineRequest, rubric: list[dict[str, str]]
+) -> str:
+    rubric_lines = '\n'.join(
+        f'- id="{item["id"]}" ({item["label"]}): {item["guidance"]}' for item in rubric
+    )
+
+    transcript = getattr(inputs, 'transcript', None)
+    transcript_section = (
+        f'Source transcript / reference material:\n"""\n{transcript}\n"""\n\n'
+        if transcript
+        else 'No source transcript was supplied for this draft.\n\n'
+    )
+
+    return (
+        'You are a meticulous editorial QA evaluator. Score the draft below against each rubric '
+        'criterion, and separately score how well the draft is grounded in / faithful to the source '
+        'transcript (its "RAG score" -- i.e. how well it stays true to the retrieved source content, '
+        'independent of style or tone).\n\n'
+        f'{transcript_section}'
+        f'Draft to evaluate:\n"""\n{draft}\n"""\n\n'
+        'Rubric criteria to assess:\n'
+        f'{rubric_lines}\n\n'
+        'For each criterion, assign a status of exactly "pass", "partial", or "fail", and a '
+        'one-sentence description explaining the assessment.\n\n'
+        'Then provide:\n'
+        '- "quality_score": an overall 0-100 score representing how well the draft satisfies the '
+        'rubric criteria as a whole.\n'
+        '- "rag_score": a 0-100 score (or null if there is no transcript) representing how '
+        'factually grounded/faithful the draft is to the source transcript specifically '
+        '(penalize fabricated, unsupported, or contradicted claims).\n\n'
+        'Respond with ONLY a JSON object in this exact shape, no commentary, no markdown fences:\n'
+        '{\n'
+        '  "criteria": [{"id": "...", "status": "pass|partial|fail", "description": "..."}],\n'
+        '  "quality_score": 0-100,\n'
+        '  "rag_score": 0-100 or null\n'
+        '}'
+    )
+
+
+def _fallback_quality(rubric: list[dict[str, str]], reason: str) -> QualityDetails:
+    """Used when the LLM judge can't be reached, so draft generation itself never fails
+    because of an evaluation problem."""
+    criteria = [
+        QualityCriteria(
+            id=item['id'],
+            label=item['label'],
+            status='unknown',
+            description=f'Automated evaluation unavailable: {reason}',
+        )
+        for item in rubric
+    ]
+    return QualityDetails(qualityScore=0.0, ragScore=None, criteria=criteria)
+
+
+def _score_from_status(criteria_payload: list[dict[str, Any]]) -> float:
+    """Fallback numeric score derived from per-criterion status, used only if the model
+    fails to return a usable quality_score value."""
+    if not criteria_payload:
+        return 0.0
+    scores = [_STATUS_SCORES.get(str(c.get('status', '')).lower(), 0.0) for c in criteria_payload]
+    return round(sum(scores) / len(scores), 1)
+
+
+async def evaluate_drafts(
+    drafts: list[str], inputs: GenerateRequest | RefineRequest
+) -> list[QualityDetails]:
+    """Score each draft against a rubric derived from the user's input attributes
+    (audience, goal, tone, platform, length, keywords, brand voice, etc.), plus a
+    groundedness ("RAG") score measuring how faithful the draft is to the supplied
+    transcript/content.
+
+    Uses the OpenAI API as an LLM-judge, run concurrently across drafts. Falls back to a
+    neutral, clearly-labeled result if the API key is missing or a call fails, so that
+    evaluation issues never break draft generation itself.
+    """
+    rubric = _build_rubric(inputs)
+
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        return [_fallback_quality(rubric, 'no API key configured') for _ in drafts]
+    if not rubric:
+        return [_fallback_quality(rubric, 'no rubric criteria available for these inputs') for _ in drafts]
+
+    try:
+        from openai import AsyncOpenAI
+    except Exception:
+        return [_fallback_quality(rubric, 'openai package unavailable') for _ in drafts]
+
+    client = AsyncOpenAI(api_key=api_key)
+
+    async def _evaluate_one(draft: str) -> QualityDetails:
+        prompt = _build_evaluation_prompt(draft, inputs, rubric)
+        try:
+            response = await client.chat.completions.create(
+                model=_EVAL_MODEL,
+                messages=[
+                    {
+                        'role': 'system',
+                        'content': 'You are a strict, consistent evaluator. You only ever respond with valid JSON.',
+                    },
+                    {'role': 'user', 'content': prompt},
+                ],
+                temperature=0.0,
+                response_format={'type': 'json_object'},
+            )
+            raw = response.choices[0].message.content or '{}'
+            payload = json.loads(raw)
+        except Exception as exc:
+            return _fallback_quality(rubric, f'evaluation call failed ({exc})')
+
+        criteria_payload = payload.get('criteria') or []
+
+        criteria: list[QualityCriteria] = []
+        for item in rubric:
+            match = next((c for c in criteria_payload if c.get('id') == item['id']), None)
+            if match:
+                status = str(match.get('status', 'unknown')).lower()
+                description = str(match.get('description', ''))
+            else:
+                status = 'unknown'
+                description = 'Evaluator did not return a result for this criterion.'
+            criteria.append(
+                QualityCriteria(
+                    id=item['id'],
+                    label=item['label'],
+                    status=status,
+                    description=description,
+                )
+            )
+
+        quality_score = payload.get('quality_score')
+        if not isinstance(quality_score, (int, float)):
+            quality_score = _score_from_status(criteria_payload)
+
+        rag_score = payload.get('rag_score')
+        if rag_score is not None and not isinstance(rag_score, (int, float)):
+            rag_score = None
+
+        return QualityDetails(
+            qualityScore=float(quality_score),
+            ragScore=float(rag_score) if rag_score is not None else None,
+            criteria=criteria,
+        )
+
+    return list(await asyncio.gather(*(_evaluate_one(draft) for draft in drafts)))

@@ -24,12 +24,27 @@ export interface DraftPayload {
   };
 }
 
+export interface QualityCriteria {
+  id: string;
+  label: string;
+  status: string;
+  description: string;
+}
+
+export interface QualityDetails {
+  qualityScore: number;
+  ragScore?: number | null;
+  criteria: QualityCriteria[];
+}
+
+export interface DraftResult {
+  text: string;
+  quality?: QualityDetails | null;
+}
+
 export interface AIResponse {
-  text?: string;
-  drafts?: string[];
-  key_points?: string[];
+  results: DraftResult[];
   error?: string | null;
-  quality?: any;
 }
 
 export interface RAGStatusResponse {
